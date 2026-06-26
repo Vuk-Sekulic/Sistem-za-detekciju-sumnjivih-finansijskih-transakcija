@@ -1,0 +1,128 @@
+package rules
+
+import com.example.demo.model.Transaction;
+import com.example.demo.model.UserRiskProfile;
+import com.example.demo.model.EvaluationResult;
+import com.example.demo.model.TransactionStatus;
+import com.example.demo.model.Recommendation;
+import com.example.demo.model.RiskLevel;
+
+rule "Large transaction amount"
+salience 100
+when
+    Transaction(current == true, amount > 1000)
+    $result : EvaluationResult(largeAmountDetected == false)
+then
+    $result.markLargeAmountDetected();
+    update($result);
+end
+
+rule "Rapid sequence of transactions"
+salience 100
+when
+    $current : Transaction(current == true, $uid : userId)
+    Number(intValue >= 3) from accumulate(
+        Transaction(userId == $uid),
+        count(1)
+    )
+    $result : EvaluationResult(isRapidSequenceDetected() == false)
+then
+    $result.markRapidSequenceDetected();
+    update($result);
+end
+
+rule "Location change in short time"
+salience 100
+when
+    $current : Transaction(current == true, $uid : userId, $location : location)
+    Transaction(current == false, userId == $uid, location != $location)
+    $result : EvaluationResult(isLocationChangeDetected() == false)
+then
+    $result.markLocationChangeDetected();
+    update($result);
+end
+
+rule "Unusual transaction amount"
+salience 100
+when
+    $transaction : Transaction(current == true, $uid : userId, $amount : amount)
+    $profile : UserRiskProfile(userId == $uid, averageTransactionAmount > 0, $average : averageTransactionAmount)
+    eval($amount > $average * 3)
+    $result : EvaluationResult(unusualAmountDetected == false)
+then
+    $result.markUnusualAmountDetected();
+    update($result);
+end
+
+rule "Multiple suspicious conditions mean fraud"
+salience 50
+when
+    $result : EvaluationResult(status != TransactionStatus.FRAUD, suspiciousConditionCount >= 2)
+then
+    $result.markFraud("Multiple suspicious conditions detected");
+    update($result);
+end
+
+rule "High risk user and suspicious transaction mean fraud"
+salience 50
+when
+    UserRiskProfile(riskLevel == RiskLevel.HIGH)
+    $result : EvaluationResult(status == TransactionStatus.SUSPICIOUS)
+then
+    $result.markFraud("Suspicious transaction from high risk user");
+    update($result);
+end
+
+rule "Fraud sets user risk to high"
+salience 10
+when
+    $result : EvaluationResult(status == TransactionStatus.FRAUD, riskUpdated == false)
+    $profile : UserRiskProfile()
+then
+    $profile.setRiskLevel(RiskLevel.HIGH);
+    $profile.setFraudTransactionsLast7($profile.getFraudTransactionsLast7() + 1);
+
+    $result.setRiskUpdated(true);
+
+    update($profile);
+    update($result);
+end
+
+rule "Suspicious transaction raises risk from none to low"
+salience 10
+when
+    $result : EvaluationResult(status == TransactionStatus.SUSPICIOUS, riskUpdated == false)
+    $profile : UserRiskProfile(riskLevel == RiskLevel.NONE)
+then
+    $profile.setRiskLevel(RiskLevel.LOW);
+    $result.setRiskUpdated(true);
+
+    update($profile);
+    update($result);
+end
+
+rule "Suspicious transaction raises risk from low to medium"
+salience 10
+when
+    $result : EvaluationResult(status == TransactionStatus.SUSPICIOUS, riskUpdated == false)
+    $profile : UserRiskProfile(riskLevel == RiskLevel.LOW)
+then
+    $profile.setRiskLevel(RiskLevel.MEDIUM);
+    $result.setRiskUpdated(true);
+
+    update($profile);
+    update($result);
+end
+
+rule "Suspicious transaction raises risk from medium to high"
+salience 10
+when
+    $result : EvaluationResult(status == TransactionStatus.SUSPICIOUS, riskUpdated == false)
+    $profile : UserRiskProfile(riskLevel == RiskLevel.MEDIUM)
+then
+    $profile.setRiskLevel(RiskLevel.HIGH);
+    $result.setRiskUpdated(true);
+
+    update($profile);
+    update($result);
+end

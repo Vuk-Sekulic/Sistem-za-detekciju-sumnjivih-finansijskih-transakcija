@@ -12,7 +12,7 @@ public class UserRiskProfile {
     @Enumerated(EnumType.STRING)
     private RiskLevel riskLevel = RiskLevel.NONE;
 
-    private double averageTransactionAmount = 500;
+    private double typicalTransactionAmount = 500;
 
     private int fraudTransactionsLast7 = 0;
 
@@ -22,14 +22,14 @@ public class UserRiskProfile {
     public UserRiskProfile(String userId) {
         this.userId = userId;
         this.riskLevel = RiskLevel.NONE;
-        this.averageTransactionAmount = 500;
+        this.typicalTransactionAmount = 500;
         this.fraudTransactionsLast7 = 0;
     }
 
-    public UserRiskProfile(String userId, RiskLevel riskLevel, double averageTransactionAmount, int fraudTransactionsLast7) {
+    public UserRiskProfile(String userId, RiskLevel riskLevel, double typicalTransactionAmount, int fraudTransactionsLast7) {
         this.userId = userId;
         this.riskLevel = riskLevel;
-        this.averageTransactionAmount = averageTransactionAmount;
+        this.typicalTransactionAmount = typicalTransactionAmount;
         this.fraudTransactionsLast7 = fraudTransactionsLast7;
     }
 
@@ -41,8 +41,8 @@ public class UserRiskProfile {
         return riskLevel;
     }
 
-    public double getAverageTransactionAmount() {
-        return averageTransactionAmount;
+    public double getTypicalTransactionAmount() {
+        return typicalTransactionAmount;
     }
 
     public int getFraudTransactionsLast7() {
@@ -57,8 +57,8 @@ public class UserRiskProfile {
         this.riskLevel = riskLevel;
     }
 
-    public void setAverageTransactionAmount(double averageTransactionAmount) {
-        this.averageTransactionAmount = averageTransactionAmount;
+    public void setTypicalTransactionAmount(double typicalTransactionAmount) {
+        this.typicalTransactionAmount = typicalTransactionAmount;
     }
 
     public void setFraudTransactionsLast7(int fraudTransactionsLast7) {

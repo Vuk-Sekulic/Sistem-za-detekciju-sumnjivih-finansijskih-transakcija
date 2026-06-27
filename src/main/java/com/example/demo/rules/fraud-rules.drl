@@ -46,8 +46,8 @@ rule "Unusual transaction amount"
 salience 100
 when
     $transaction : Transaction(current == true, $uid : userId, $amount : amount)
-    $profile : UserRiskProfile(userId == $uid, averageTransactionAmount > 0, $average : averageTransactionAmount)
-    eval($amount > $average * 3)
+    $profile : UserRiskProfile(userId == $uid, typicalTransactionAmount > 0, $typicalAmount : typicalTransactionAmount)
+    eval($amount > $typicalAmount * 3)
     $result : EvaluationResult(unusualAmountDetected == false)
 then
     $result.markUnusualAmountDetected();

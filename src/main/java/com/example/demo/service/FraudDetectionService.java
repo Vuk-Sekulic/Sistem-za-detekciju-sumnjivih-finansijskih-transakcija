@@ -35,6 +35,9 @@ public class FraudDetectionService {
 
     public EvaluationResult evaluate(Transaction transaction) {
         UserRiskProfile profile = userRiskProfileService.getOrCreate(transaction.getUserId());
+        
+        double typicalAmount = calculateMedianTransactionAmount(transaction.getUserId());
+        profile.setTypicalTransactionAmount(typicalAmount);
 
         LocalDateTime twoMinutesBefore = transaction.getExecutedAt().minusMinutes(2);
 
@@ -60,46 +63,6 @@ public class FraudDetectionService {
         transactionRepository.save(transaction);
 
         updateFraudCountLast7Days(transaction, profile);
-        result.setFinalRiskLevel(profile.getRiskLevel());
-
-        userRiskProfileService.save(profile);
-
-        return result;
-    }
-
-    public EvaluationResult evaluateSequence(List<Transaction> transactions) {
-        if (transactions.isEmpty()) {
-            return new EvaluationResult();
-        }
-
-        transactions.sort(Comparator.comparing(Transaction::getExecutedAt));
-
-        Transaction currentTransaction = transactions.get(transactions.size() - 1);
-        UserRiskProfile profile = userRiskProfileService.getOrCreate(currentTransaction.getUserId());
-
-        LocalDateTime twoMinutesBefore = currentTransaction.getExecutedAt().minusMinutes(2);
-
-        List<Transaction> facts = transactions.stream()
-                .filter(t -> t.getUserId().equals(currentTransaction.getUserId()))
-                .filter(t -> !t.getExecutedAt().isBefore(twoMinutesBefore))
-                .filter(t -> !t.getExecutedAt().isAfter(currentTransaction.getExecutedAt()))
-                .toList();
-
-        for (Transaction transaction : facts) {
-            transaction.setCurrent(false);
-        }
-
-        currentTransaction.setCurrent(true);
-
-        EvaluationResult result = evaluateWithDrools(facts, profile);
-
-        for (Transaction transaction : transactions) {
-            transaction.setStatus(result.getStatus());
-        }
-
-        transactionRepository.saveAll(transactions);
-
-        updateFraudCountLast7Days(currentTransaction, profile);
         result.setFinalRiskLevel(profile.getRiskLevel());
 
         userRiskProfileService.save(profile);
@@ -139,5 +102,30 @@ public class FraudDetectionService {
                 );
 
         profile.setFraudTransactionsLast7(fraudCount);
+    }
+    
+    private double calculateMedianTransactionAmount(String userId) {
+        List<Transaction> userTransactions = transactionRepository.findByUserIdOrderByExecutedAtDesc(userId);
+
+        if (userTransactions.isEmpty()) {
+            return 500;
+        }
+        
+        if (userTransactions.size() < 3) {
+            return 500;
+        }
+
+        List<Double> amounts = userTransactions.stream()
+                .map(Transaction::getAmount)
+                .sorted()
+                .toList();
+
+        int size = amounts.size();
+
+        if (size % 2 == 1) {
+            return amounts.get(size / 2);
+        }
+
+        return (amounts.get(size / 2 - 1) + amounts.get(size / 2)) / 2.0;
     }
 }

@@ -6,6 +6,7 @@ import com.example.demo.model.EvaluationResult;
 import com.example.demo.model.TransactionStatus;
 import com.example.demo.model.Recommendation;
 import com.example.demo.model.RiskLevel;
+import com.example.demo.model.RiskDecreaseRequest;
 
 rule "Large transaction amount"
 salience 100
@@ -125,4 +126,56 @@ then
 
     update($profile);
     update($result);
+end
+
+rule "Risk decrease from high to medium"
+salience 5
+when
+    $request : RiskDecreaseRequest($uid : userId, applied == false)
+    $profile : UserRiskProfile(userId == $uid, riskLevel == RiskLevel.HIGH)
+    $result : EvaluationResult()
+then
+    $profile.setRiskLevel(RiskLevel.MEDIUM);
+    $request.setApplied(true);
+    $result.addActivatedRule("Last 5 transactions were legitimate, risk decreased from high to medium");
+
+    update($profile);
+    update($request);
+    update($result);
+end
+
+rule "Risk decrease from medium to low"
+salience 5
+when
+    $request : RiskDecreaseRequest($uid : userId, applied == false)
+    $profile : UserRiskProfile(userId == $uid, riskLevel == RiskLevel.MEDIUM)
+    $result : EvaluationResult()
+then
+    $profile.setRiskLevel(RiskLevel.LOW);
+    $request.setApplied(true);
+    $result.addActivatedRule("Last 5 transactions were legitimate, risk decreased from medium to low");
+
+    update($profile);
+    update($request);
+    update($result);
+end
+
+rule "Risk decrease from low to none"
+salience 5
+when
+    $request : RiskDecreaseRequest($uid : userId, applied == false)
+    $profile : UserRiskProfile(userId == $uid, riskLevel == RiskLevel.LOW)
+    $result : EvaluationResult()
+then
+    $profile.setRiskLevel(RiskLevel.NONE);
+    $request.setApplied(true);
+    $result.addActivatedRule("Last 5 transactions were legitimate, risk decreased from low to none");
+
+    update($profile);
+    update($request);
+    update($result);
+end
+
+query "shouldSuspendAccount"
+    UserRiskProfile(riskLevel == RiskLevel.HIGH, fraudTransactionsLast7 >= 3)
 end

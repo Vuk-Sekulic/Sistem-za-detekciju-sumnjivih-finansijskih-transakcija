@@ -11,6 +11,8 @@ import com.example.demo.model.TransactionStatus;
 public interface TransactionRepository extends JpaRepository<Transaction, Long> {
 
     List<Transaction> findByUserIdOrderByExecutedAtDesc(String userId);
+    
+    List<Transaction> findTop5ByUserIdOrderByExecutedAtDesc(String userId);
 
     List<Transaction> findByUserIdAndExecutedAtBetween(
             String userId,

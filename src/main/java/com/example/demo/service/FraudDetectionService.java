@@ -2,7 +2,6 @@ package com.example.demo.service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 import org.kie.api.KieServices;
@@ -11,6 +10,7 @@ import org.kie.api.runtime.KieSession;
 import org.springframework.stereotype.Service;
 
 import com.example.demo.model.EvaluationResult;
+import com.example.demo.model.RiskDecreaseRequest;
 import com.example.demo.model.Transaction;
 import com.example.demo.model.TransactionStatus;
 import com.example.demo.model.UserRiskProfile;
@@ -35,7 +35,7 @@ public class FraudDetectionService {
 
     public EvaluationResult evaluate(Transaction transaction) {
         UserRiskProfile profile = userRiskProfileService.getOrCreate(transaction.getUserId());
-        
+
         double typicalAmount = calculateMedianTransactionAmount(transaction.getUserId());
         profile.setTypicalTransactionAmount(typicalAmount);
 
@@ -63,6 +63,9 @@ public class FraudDetectionService {
         transactionRepository.save(transaction);
 
         updateFraudCountLast7Days(transaction, profile);
+
+        applyRiskDecreaseIfAllowed(transaction, profile, result);
+
         result.setFinalRiskLevel(profile.getRiskLevel());
 
         userRiskProfileService.save(profile);
@@ -91,6 +94,55 @@ public class FraudDetectionService {
         }
     }
 
+    private void applyRiskDecreaseIfAllowed(
+            Transaction transaction,
+            UserRiskProfile profile,
+            EvaluationResult result
+    ) {
+        if (result.getStatus() != TransactionStatus.LEGITIMATE) {
+            return;
+        }
+
+        List<Transaction> userTransactions = transactionRepository
+                .findByUserIdOrderByExecutedAtDesc(transaction.getUserId());
+
+        int consecutiveLegitimateTransactions = 0;
+
+        for (Transaction userTransaction : userTransactions) {
+            if (userTransaction.getStatus() == TransactionStatus.LEGITIMATE) {
+                consecutiveLegitimateTransactions++;
+            } else {
+                break;
+            }
+        }
+
+        if (consecutiveLegitimateTransactions < 5) {
+            return;
+        }
+
+        if (consecutiveLegitimateTransactions % 5 != 0) {
+            return;
+        }
+
+        applyRiskDecreaseWithDrools(profile, result);
+    }
+    
+    private void applyRiskDecreaseWithDrools(UserRiskProfile profile, EvaluationResult result) {
+        KieSession kieSession = kieContainer.newKieSession("fraudKSession");
+
+        RiskDecreaseRequest request = new RiskDecreaseRequest(profile.getUserId());
+
+        try {
+            kieSession.insert(profile);
+            kieSession.insert(result);
+            kieSession.insert(request);
+
+            kieSession.fireAllRules();
+        } finally {
+            kieSession.dispose();
+        }
+    }
+
     private void updateFraudCountLast7Days(Transaction transaction, UserRiskProfile profile) {
         LocalDateTime sevenDaysAgo = transaction.getExecutedAt().minusDays(7);
 
@@ -103,14 +155,11 @@ public class FraudDetectionService {
 
         profile.setFraudTransactionsLast7(fraudCount);
     }
-    
-    private double calculateMedianTransactionAmount(String userId) {
-        List<Transaction> userTransactions = transactionRepository.findByUserIdOrderByExecutedAtDesc(userId);
 
-        if (userTransactions.isEmpty()) {
-            return 500;
-        }
-        
+    private double calculateMedianTransactionAmount(String userId) {
+        List<Transaction> userTransactions = transactionRepository
+                .findByUserIdOrderByExecutedAtDesc(userId);
+
         if (userTransactions.size() < 3) {
             return 500;
         }
